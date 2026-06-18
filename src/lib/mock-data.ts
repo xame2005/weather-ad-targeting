@@ -1,4 +1,5 @@
 import { addDays, eachDayOfInterval, format, parseISO } from "date-fns";
+import { getAllDmaSamplePoints } from "./dma-markets";
 import type { PointForecast, PointForecastDay, PrecipitationType } from "./types";
 import { US_STATES } from "./state-points";
 
@@ -30,15 +31,12 @@ function climateBaseline(latitude: number, month: number) {
 }
 
 function generateDay(
-  stateAbbrev: string,
-  pointName: string,
+  seedKey: string,
   latitude: number,
   date: string,
 ): PointForecastDay {
   const month = parseISO(date).getMonth() + 1;
-  const rand = seededRandom(
-    hashString(`${stateAbbrev}-${pointName}-${date}`),
-  );
+  const rand = seededRandom(hashString(`${seedKey}-${date}`));
   const climate = climateBaseline(latitude, month);
   const noise = (rand() - 0.5) * 16;
 
@@ -99,10 +97,31 @@ export function generateDemoForecasts(
       latitude: point.latitude,
       longitude: point.longitude,
       days: days.map((date) =>
-        generateDay(stateDef.abbrev, point.name, point.latitude, date),
+        generateDay(`${stateDef.abbrev}-${point.name}`, point.latitude, date),
       ),
     })),
   );
+}
+
+export function generateDemoDmaForecasts(
+  startDate: string,
+  endDate: string,
+): PointForecast[] {
+  const days = eachDayOfInterval({
+    start: parseISO(startDate),
+    end: parseISO(endDate),
+  }).map((day) => format(day, "yyyy-MM-dd"));
+
+  return getAllDmaSamplePoints().map((point) => ({
+    dmaCode: point.dmaCode,
+    dmaName: point.dmaName,
+    pointName: point.name,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    days: days.map((date) =>
+      generateDay(`dma-${point.dmaCode}`, point.latitude, date),
+    ),
+  }));
 }
 
 export function generateDemoForecastsForDays(daysAhead: number): PointForecast[] {

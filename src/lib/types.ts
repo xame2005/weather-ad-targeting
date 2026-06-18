@@ -73,7 +73,9 @@ export interface PointForecastDay {
 }
 
 export interface PointForecast {
-  stateAbbrev: string;
+  stateAbbrev?: string;
+  dmaCode?: number;
+  dmaName?: string;
   pointName: string;
   latitude: number;
   longitude: number;
@@ -97,17 +99,39 @@ export interface StateMatchResult {
   };
 }
 
+export interface EvaluateRequest {
+  campaignId: string;
+  timeframe: Timeframe;
+  minMatchRatio?: number;
+  geoLevel?: GeoLevel;
+  customThresholds?: CustomThresholds;
+}
+
+export type GeoLevel = "state" | "dma";
+
+export interface CustomThresholds {
+  temperatureMaxF?: number;
+  heatIndexF?: number;
+  usAqi?: number;
+  precipitationProbability?: number;
+}
+
+export interface DmaMatchResult {
+  dmaCode: number;
+  dmaName: string;
+  dmaRank: number;
+  matched: boolean;
+  matchRatio: number;
+  summary: StateMatchResult["summary"];
+}
+
 export interface EvaluationResult {
   campaign: CampaignConfig;
   timeframe: Timeframe;
   evaluatedAt: string;
   dataSource: "live" | "demo";
+  geoLevel: GeoLevel;
   states: StateMatchResult[];
+  dmas: DmaMatchResult[];
   matchedCount: number;
-}
-
-export interface EvaluateRequest {
-  campaignId: string;
-  timeframe: Timeframe;
-  minMatchRatio?: number;
 }

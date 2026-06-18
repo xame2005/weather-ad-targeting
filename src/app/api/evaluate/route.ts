@@ -3,9 +3,12 @@ import {
   campaignNeedsAirQuality,
   evaluateCampaign,
 } from "@/lib/aggregator";
-import { getCampaignById, CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
+import { resolveCampaign } from "@/lib/campaign-builder";
+import { CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
 import { fetchForecastsForAllPoints } from "@/lib/weather-client";
 import type { EvaluateRequest } from "@/lib/types";
+
+export const maxDuration = 60;
 
 export async function GET() {
   return NextResponse.json({
@@ -29,7 +32,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const campaign = getCampaignById(body.campaignId);
+    const campaign = resolveCampaign(body.campaignId, body.customThresholds);
     if (!campaign) {
       return NextResponse.json(
         { error: `Unknown campaign: ${body.campaignId}` },
@@ -37,10 +40,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const geoLevel = body.geoLevel ?? "state";
+
     const { forecasts, dataSource } = await fetchForecastsForAllPoints(
       body.timeframe.startDate,
       body.timeframe.endDate,
       campaignNeedsAirQuality(campaign),
+      geoLevel,
     );
 
     const result = evaluateCampaign(
@@ -49,6 +55,7 @@ export async function POST(request: Request) {
       forecasts,
       body.minMatchRatio,
       dataSource,
+      geoLevel,
     );
 
     return NextResponse.json(result);

@@ -10,24 +10,52 @@ import {
   OutageCampaignPanel,
   type OutageFormValues,
 } from "@/components/OutageCampaignPanel";
+import { DMAMap } from "@/components/DMAMap";
 import { USMap } from "@/components/USMap";
+import { getDefaultThreshold } from "@/lib/campaign-builder";
+import { CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
 import { getCompetitorSuggestions } from "@/lib/outage-engine";
 import type { MapViewState } from "@/lib/outage-types";
 import type { OutageEvaluationResult } from "@/lib/outage-types";
 import { CATEGORY_LABELS, SEVERITY_LABELS } from "@/lib/outage-types";
-import type { EvaluationResult, StateMatchResult } from "@/lib/types";
+import type {
+  DmaMatchResult,
+  EvaluationResult,
+  StateMatchResult,
+} from "@/lib/types";
 
 type TargetingMode = "weather" | "outages";
 
 function defaultWeatherForm(): CampaignFormValues {
   const start = new Date();
   const end = addDays(start, 2);
+  const campaign = CAMPAIGN_PRESETS[0];
   return {
-    campaignId: "cold",
+    campaignId: campaign.id,
+    geoLevel: "state",
     startDate: format(start, "yyyy-MM-dd"),
     endDate: format(end, "yyyy-MM-dd"),
     minMatchRatio: 0.5,
+    customThreshold: getDefaultThreshold(campaign),
   };
+}
+
+function buildCustomThresholds(form: CampaignFormValues) {
+  if (form.customThreshold == null) return undefined;
+
+  switch (form.campaignId) {
+    case "cold":
+    case "hot":
+      return { temperatureMaxF: form.customThreshold };
+    case "heat-index":
+      return { heatIndexF: form.customThreshold };
+    case "poor-aqi":
+      return { usAqi: form.customThreshold };
+    case "rain":
+      return { precipitationProbability: form.customThreshold };
+    default:
+      return undefined;
+  }
 }
 
 function defaultOutageForm(): OutageFormValues {
@@ -66,11 +94,15 @@ export function Dashboard() {
   const [outageResult, setOutageResult] =
     useState<OutageEvaluationResult | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [selectedDmaCode, setSelectedDmaCode] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedWeatherState: StateMatchResult | null =
     weatherResult?.states.find((s) => s.stateAbbrev === selectedState) ?? null;
+
+  const selectedWeatherDma: DmaMatchResult | null =
+    weatherResult?.dmas.find((dma) => dma.dmaCode === selectedDmaCode) ?? null;
 
   const selectedOutageState =
     outageResult?.states.find((s) => s.stateAbbrev === selectedState) ?? null;
@@ -90,6 +122,8 @@ export function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           campaignId: weatherForm.campaignId,
+          geoLevel: weatherForm.geoLevel,
+          customThresholds: buildCustomThresholds(weatherForm),
           timeframe: {
             startDate: weatherForm.startDate,
             endDate: weatherForm.endDate,
@@ -105,6 +139,7 @@ export function Dashboard() {
 
       setWeatherResult((await response.json()) as EvaluationResult);
       setSelectedState(null);
+      setSelectedDmaCode(null);
     } catch (evalError) {
       setError(
         evalError instanceof Error ? evalError.message : "Evaluation failed",
@@ -164,6 +199,8 @@ export function Dashboard() {
             isWeather
               ? {
                   campaignId: weatherForm.campaignId,
+                  geoLevel: weatherForm.geoLevel,
+                  customThresholds: buildCustomThresholds(weatherForm),
                   timeframe: {
                     startDate: weatherForm.startDate,
                     endDate: weatherForm.endDate,
@@ -210,6 +247,8 @@ export function Dashboard() {
 
   const matchedWeatherStates =
     weatherResult?.states.filter((state) => state.matched) ?? [];
+  const matchedWeatherDmas =
+    weatherResult?.dmas.filter((dma) => dma.matched) ?? [];
   const matchedOutageStates =
     outageResult?.states.filter((state) => state.matched) ?? [];
 
@@ -267,14 +306,18 @@ export function Dashboard() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                US State Targeting Map
+                {mode === "weather" && weatherForm.geoLevel === "dma"
+                  ? "US DMA Targeting Map"
+                  : "US State Targeting Map"}
               </h2>
               <p className="text-sm text-slate-600">
                 {mode === "weather" && weatherResult
-                  ? `${weatherResult.matchedCount} states match "${weatherResult.campaign.name}" (${weatherResult.timeframe.startDate} → ${weatherResult.timeframe.endDate})`
+                  ? weatherResult.geoLevel === "dma"
+                    ? `${weatherResult.matchedCount} DMAs match "${weatherResult.campaign.name}" (${weatherResult.timeframe.startDate} → ${weatherResult.timeframe.endDate})`
+                    : `${weatherResult.matchedCount} states match "${weatherResult.campaign.name}" (${weatherResult.timeframe.startDate} → ${weatherResult.timeframe.endDate})`
                   : mode === "outages" && outageResult
                     ? `${outageResult.matchedCount} states with "${outageResult.campaign.name}"`
-                    : "Run a scan to highlight matching states"}
+                    : "Run a scan to highlight matching markets"}
               </p>
             </div>
             {(weatherResult || outageResult) && (
@@ -300,13 +343,22 @@ export function Dashboard() {
 
         <div className="grid flex-1 grid-cols-1 gap-0 lg:grid-cols-[1fr_340px]">
           <section className="relative min-h-[420px] bg-white p-4">
-            <USMap
-              states={mapStates}
-              campaignColor={campaignColor}
-              selectedState={selectedState}
-              onSelectState={setSelectedState}
-              intensityLabel={mode === "outages" ? "spike" : "match"}
-            />
+            {mode === "weather" && weatherResult?.geoLevel === "dma" ? (
+              <DMAMap
+                dmas={weatherResult.dmas}
+                campaignColor={campaignColor}
+                selectedDmaCode={selectedDmaCode}
+                onSelectDma={setSelectedDmaCode}
+              />
+            ) : (
+              <USMap
+                states={mapStates}
+                campaignColor={campaignColor}
+                selectedState={selectedState}
+                onSelectState={setSelectedState}
+                intensityLabel={mode === "outages" ? "spike" : "match"}
+              />
+            )}
             {(weatherResult || outageResult) && (
               <div className="absolute bottom-6 left-6 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 text-xs text-slate-600 shadow-sm">
                 <p className="font-medium text-slate-800">Legend</p>
@@ -318,18 +370,22 @@ export function Dashboard() {
                   <span>
                     {mode === "outages"
                       ? "Competitor outage detected"
-                      : "Matches criteria"}
+                      : weatherResult?.geoLevel === "dma"
+                        ? "Matching DMA"
+                        : "Matches criteria"}
                   </span>
                 </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span
-                    className="inline-block h-3 w-3 rounded-sm opacity-40"
-                    style={{ backgroundColor: campaignColor }}
-                  />
-                  <span>
-                    {mode === "outages" ? "Elevated activity" : "Partial match"}
-                  </span>
-                </div>
+                {weatherResult?.geoLevel !== "dma" && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 rounded-sm opacity-40"
+                      style={{ backgroundColor: campaignColor }}
+                    />
+                    <span>
+                      {mode === "outages" ? "Elevated activity" : "Partial match"}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -337,9 +393,13 @@ export function Dashboard() {
           <aside className="border-l border-slate-200 bg-white p-6">
             {mode === "weather" ? (
               <WeatherSidebar
+                geoLevel={weatherResult?.geoLevel ?? weatherForm.geoLevel}
                 selectedState={selectedWeatherState}
+                selectedDma={selectedWeatherDma}
                 matchedStates={matchedWeatherStates}
+                matchedDmas={matchedWeatherDmas}
                 onSelectState={setSelectedState}
+                onSelectDma={setSelectedDmaCode}
                 hasResult={weatherResult != null}
               />
             ) : (
@@ -359,16 +419,66 @@ export function Dashboard() {
 }
 
 function WeatherSidebar({
+  geoLevel,
   selectedState,
+  selectedDma,
   matchedStates,
+  matchedDmas,
   onSelectState,
+  onSelectDma,
   hasResult,
 }: {
+  geoLevel: "state" | "dma";
   selectedState: StateMatchResult | null;
+  selectedDma: DmaMatchResult | null;
   matchedStates: StateMatchResult[];
+  matchedDmas: DmaMatchResult[];
   onSelectState: (abbrev: string) => void;
+  onSelectDma: (code: number) => void;
   hasResult: boolean;
 }) {
+  if (geoLevel === "dma" && selectedDma) {
+    return (
+      <>
+        <h3 className="text-sm font-semibold text-slate-900">
+          {selectedDma.dmaName}
+        </h3>
+        <p className="mt-1 text-xs text-slate-500">
+          DMA {selectedDma.dmaCode} · Rank #{selectedDma.dmaRank}
+        </p>
+        <dl className="mt-4 space-y-3 text-sm">
+          <SidebarItem
+            label="Avg max temp"
+            value={`${selectedDma.summary.avgMaxTempF}°F`}
+          />
+          <SidebarItem
+            label="Avg min temp"
+            value={`${selectedDma.summary.avgMinTempF}°F`}
+          />
+          <SidebarItem
+            label="Precipitation"
+            value={`${selectedDma.summary.avgPrecipProbability}% (${selectedDma.summary.dominantPrecipType})`}
+          />
+          {selectedDma.summary.avgUsAqi != null && (
+            <SidebarItem
+              label="Avg US AQI"
+              value={String(selectedDma.summary.avgUsAqi)}
+            />
+          )}
+          <SidebarItem
+            label="Target status"
+            value={
+              selectedDma.matched
+                ? "Include in ad segment"
+                : "Does not meet threshold"
+            }
+            highlight={selectedDma.matched}
+          />
+        </dl>
+      </>
+    );
+  }
+
   if (selectedState) {
     return (
       <>
@@ -408,6 +518,42 @@ function WeatherSidebar({
             highlight={selectedState.matched}
           />
         </dl>
+      </>
+    );
+  }
+
+  if (geoLevel === "dma") {
+    return (
+      <>
+        <h3 className="text-sm font-semibold text-slate-900">Matched DMAs</h3>
+        <ul className="mt-4 max-h-[520px] space-y-2 overflow-y-auto text-sm">
+          {matchedDmas.length === 0 && (
+            <li className="text-slate-500">
+              {hasResult
+                ? "No DMAs matched the selected criteria."
+                : "Results will appear here after evaluation."}
+            </li>
+          )}
+          {matchedDmas.map((dma) => (
+            <li key={dma.dmaCode}>
+              <button
+                type="button"
+                onClick={() => onSelectDma(dma.dmaCode)}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50"
+              >
+                <span>
+                  <span className="font-medium text-slate-900">{dma.dmaName}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    DMA {dma.dmaCode}
+                  </span>
+                </span>
+                <span className="text-xs text-slate-500">
+                  {dma.summary.avgMaxTempF}°F
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </>
     );
   }

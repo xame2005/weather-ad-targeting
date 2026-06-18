@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
-import { campaignNeedsAirQuality, evaluateCampaign, toCsv } from "@/lib/aggregator";
-import { getCampaignById } from "@/lib/campaign-presets";
+import {
+  campaignNeedsAirQuality,
+  evaluateCampaign,
+  toCsv,
+} from "@/lib/aggregator";
+import { resolveCampaign } from "@/lib/campaign-builder";
 import { fetchForecastsForAllPoints } from "@/lib/weather-client";
 import type { EvaluateRequest } from "@/lib/types";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as EvaluateRequest;
 
-    const campaign = getCampaignById(body.campaignId);
+    const campaign = resolveCampaign(body.campaignId, body.customThresholds);
     if (!campaign) {
       return NextResponse.json(
         { error: `Unknown campaign: ${body.campaignId}` },
@@ -16,10 +22,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const geoLevel = body.geoLevel ?? "state";
+
     const { forecasts, dataSource } = await fetchForecastsForAllPoints(
       body.timeframe.startDate,
       body.timeframe.endDate,
       campaignNeedsAirQuality(campaign),
+      geoLevel,
     );
 
     const result = evaluateCampaign(
@@ -28,10 +37,12 @@ export async function POST(request: Request) {
       forecasts,
       body.minMatchRatio,
       dataSource,
+      geoLevel,
     );
 
     const csv = toCsv(result);
-    const filename = `weather-targeting-${campaign.id}-${body.timeframe.startDate}-to-${body.timeframe.endDate}.csv`;
+    const suffix = geoLevel === "dma" ? "dma" : "states";
+    const filename = `weather-targeting-${campaign.id}-${suffix}-${body.timeframe.startDate}-to-${body.timeframe.endDate}.csv`;
 
     return new NextResponse(csv, {
       headers: {

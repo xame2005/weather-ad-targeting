@@ -1,7 +1,8 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
-import type { PointForecast, PointForecastDay, PrecipitationType } from "./types";
-import { celsiusToFahrenheit, round } from "./units";
+import { getAllDmaSamplePoints } from "./dma-markets";
 import { getAllSamplePoints } from "./state-points";
+import type { GeoLevel, PointForecast, PointForecastDay, PrecipitationType } from "./types";
+import { celsiusToFahrenheit, round } from "./units";
 
 interface WeatherDayResponse {
   displayDate?: { year: number; month: number; day: number };
@@ -29,6 +30,15 @@ interface AirQualityForecastResponse {
     dateTime: string;
     indexes?: Array<{ code: string; aqi?: number }>;
   }>;
+}
+
+interface SamplePointInput {
+  stateAbbrev?: string;
+  dmaCode?: number;
+  dmaName?: string;
+  name: string;
+  latitude: number;
+  longitude: number;
 }
 
 function toFahrenheit(temp?: { degrees: number; unit: string }): number {
@@ -204,18 +214,31 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function getPointsForGeoLevel(geoLevel: GeoLevel): SamplePointInput[] {
+  if (geoLevel === "dma") {
+    return getAllDmaSamplePoints();
+  }
+  return getAllSamplePoints();
+}
+
 export async function fetchForecastsForAllPoints(
   startDate: string,
   endDate: string,
   includeAirQuality: boolean,
+  geoLevel: GeoLevel = "state",
 ): Promise<{ forecasts: PointForecast[]; dataSource: "live" | "demo" }> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const useDemo = !apiKey || process.env.USE_DEMO_DATA === "true";
 
   if (useDemo) {
-    const { generateDemoForecasts } = await import("./mock-data");
+    const { generateDemoDmaForecasts, generateDemoForecasts } = await import(
+      "./mock-data"
+    );
     return {
-      forecasts: generateDemoForecasts(startDate, endDate),
+      forecasts:
+        geoLevel === "dma"
+          ? generateDemoDmaForecasts(startDate, endDate)
+          : generateDemoForecasts(startDate, endDate),
       dataSource: "demo",
     };
   }
@@ -227,9 +250,10 @@ export async function fetchForecastsForAllPoints(
     Math.max(1, differenceInCalendarDays(end, start) + 1),
   );
 
-  const points = getAllSamplePoints();
+  const points = getPointsForGeoLevel(geoLevel);
+  const concurrency = geoLevel === "dma" ? 15 : 8;
 
-  const forecasts = await mapWithConcurrency(points, 8, async (point) => {
+  const forecasts = await mapWithConcurrency(points, concurrency, async (point) => {
     const rawDays = await fetchDailyForecast(
       apiKey,
       point.latitude,
@@ -250,6 +274,8 @@ export async function fetchForecastsForAllPoints(
 
     return {
       stateAbbrev: point.stateAbbrev,
+      dmaCode: point.dmaCode,
+      dmaName: point.dmaName,
       pointName: point.name,
       latitude: point.latitude,
       longitude: point.longitude,
