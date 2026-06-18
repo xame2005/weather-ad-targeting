@@ -1,11 +1,6 @@
 "use client";
 
 import { addDays, format } from "date-fns";
-import {
-  getDefaultThreshold,
-  supportsCustomThreshold,
-  thresholdLabel,
-} from "@/lib/campaign-builder";
 import { CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
 import type { GeoLevel } from "@/lib/types";
 
@@ -15,7 +10,6 @@ export interface CampaignFormValues {
   startDate: string;
   endDate: string;
   minMatchRatio: number;
-  customThreshold: number | null;
 }
 
 interface CampaignPanelProps {
@@ -34,8 +28,6 @@ export function CampaignPanel({
   onExport,
 }: CampaignPanelProps) {
   const selected = CAMPAIGN_PRESETS.find((c) => c.id === values.campaignId);
-  const thresholdFieldLabel = thresholdLabel(values.campaignId);
-  const showThreshold = supportsCustomThreshold(values.campaignId);
 
   function setQuickRange(days: number) {
     const start = new Date();
@@ -44,15 +36,6 @@ export function CampaignPanel({
       ...values,
       startDate: format(start, "yyyy-MM-dd"),
       endDate: format(end, "yyyy-MM-dd"),
-    });
-  }
-
-  function handleCampaignChange(campaignId: string) {
-    const campaign = CAMPAIGN_PRESETS.find((item) => item.id === campaignId);
-    onChange({
-      ...values,
-      campaignId,
-      customThreshold: campaign ? getDefaultThreshold(campaign) : null,
     });
   }
 
@@ -105,7 +88,9 @@ export function CampaignPanel({
         <select
           id="campaign"
           value={values.campaignId}
-          onChange={(event) => handleCampaignChange(event.target.value)}
+          onChange={(event) =>
+            onChange({ ...values, campaignId: event.target.value })
+          }
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
         >
           {CAMPAIGN_PRESETS.map((campaign) => (
@@ -120,26 +105,6 @@ export function CampaignPanel({
           </p>
         )}
       </div>
-
-      {showThreshold && values.customThreshold != null && thresholdFieldLabel && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700" htmlFor="threshold">
-            {thresholdFieldLabel}
-          </label>
-          <input
-            id="threshold"
-            type="number"
-            value={values.customThreshold}
-            onChange={(event) =>
-              onChange({
-                ...values,
-                customThreshold: Number(event.target.value),
-              })
-            }
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-      )}
 
       <div className="space-y-3">
         <p className="text-sm font-medium text-slate-700">Forecast window</p>

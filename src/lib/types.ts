@@ -99,21 +99,13 @@ export interface StateMatchResult {
   };
 }
 
+export type GeoLevel = "state" | "dma";
+
 export interface EvaluateRequest {
   campaignId: string;
   timeframe: Timeframe;
   minMatchRatio?: number;
   geoLevel?: GeoLevel;
-  customThresholds?: CustomThresholds;
-}
-
-export type GeoLevel = "state" | "dma";
-
-export interface CustomThresholds {
-  temperatureMaxF?: number;
-  heatIndexF?: number;
-  usAqi?: number;
-  precipitationProbability?: number;
 }
 
 export interface DmaMatchResult {

@@ -3,8 +3,7 @@ import {
   campaignNeedsAirQuality,
   evaluateCampaign,
 } from "@/lib/aggregator";
-import { resolveCampaign } from "@/lib/campaign-builder";
-import { CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
+import { getCampaignById, CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
 import { fetchForecastsForAllPoints } from "@/lib/weather-client";
 import type { EvaluateRequest } from "@/lib/types";
 
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const campaign = resolveCampaign(body.campaignId, body.customThresholds);
+    const campaign = getCampaignById(body.campaignId);
     if (!campaign) {
       return NextResponse.json(
         { error: `Unknown campaign: ${body.campaignId}` },

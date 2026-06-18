@@ -12,7 +12,6 @@ import {
 } from "@/components/OutageCampaignPanel";
 import { DMAMap } from "@/components/DMAMap";
 import { USMap } from "@/components/USMap";
-import { getDefaultThreshold } from "@/lib/campaign-builder";
 import { CAMPAIGN_PRESETS } from "@/lib/campaign-presets";
 import { getCompetitorSuggestions } from "@/lib/outage-engine";
 import type { MapViewState } from "@/lib/outage-types";
@@ -29,33 +28,13 @@ type TargetingMode = "weather" | "outages";
 function defaultWeatherForm(): CampaignFormValues {
   const start = new Date();
   const end = addDays(start, 2);
-  const campaign = CAMPAIGN_PRESETS[0];
   return {
-    campaignId: campaign.id,
+    campaignId: CAMPAIGN_PRESETS[0].id,
     geoLevel: "state",
     startDate: format(start, "yyyy-MM-dd"),
     endDate: format(end, "yyyy-MM-dd"),
     minMatchRatio: 0.5,
-    customThreshold: getDefaultThreshold(campaign),
   };
-}
-
-function buildCustomThresholds(form: CampaignFormValues) {
-  if (form.customThreshold == null) return undefined;
-
-  switch (form.campaignId) {
-    case "cold":
-    case "hot":
-      return { temperatureMaxF: form.customThreshold };
-    case "heat-index":
-      return { heatIndexF: form.customThreshold };
-    case "poor-aqi":
-      return { usAqi: form.customThreshold };
-    case "rain":
-      return { precipitationProbability: form.customThreshold };
-    default:
-      return undefined;
-  }
 }
 
 function defaultOutageForm(): OutageFormValues {
@@ -123,7 +102,6 @@ export function Dashboard() {
         body: JSON.stringify({
           campaignId: weatherForm.campaignId,
           geoLevel: weatherForm.geoLevel,
-          customThresholds: buildCustomThresholds(weatherForm),
           timeframe: {
             startDate: weatherForm.startDate,
             endDate: weatherForm.endDate,
@@ -200,7 +178,6 @@ export function Dashboard() {
               ? {
                   campaignId: weatherForm.campaignId,
                   geoLevel: weatherForm.geoLevel,
-                  customThresholds: buildCustomThresholds(weatherForm),
                   timeframe: {
                     startDate: weatherForm.startDate,
                     endDate: weatherForm.endDate,
